@@ -1,0 +1,132 @@
+--- 
+title: "Project 1 IE 6600 Spring 2020"
+Name: Prateek Suryaprkash
+Output: html_document
+---
+
+
+```{r}
+library(dplyr)
+library(ggplot2)
+library(mapdata)
+library(ggmap)
+library(usmap)
+library(maptools)
+library(tidyverse)
+library(reshape2)
+library(tidyr)
+library(plyr)
+
+f_market <- read.csv("D:/Northeastern/Computation and Visualization/Project 1/fmarket.csv", na.strings = "", stringsAsFactors = FALSE)
+
+f_m <- f_market
+
+f_m1<-aggregate(list(Count = f_m$FMID),by = list(states = f_m$State), FUN = length)
+
+ggplot(data = f_m1,aes(x = reorder(states,Count),y = Count)) +  geom_bar(stat="identity", fill = "blue") + coord_flip() + xlab("State") +
+  ylab("Number of Farmers Market") + geom_point(color = "navy", size = 0.2, alpha= 0.5)+ ggtitle("Number of Markets By State") + ggsave("marketbystate.png", dpi = 400)
+
+
+#Associating the states with the specific region base on US Census
+
+#https://en.wikipedia.org/wiki/List_of_regions_of_the_United_States#/media/File:Census_Regions_and_Division_of_the_United_States.svg
+
+northeast <-c ("Connecticut", "Maine", "Massachusetts", "New Hampshire", "Rhode Island","Vermont","New Jersey", "New York","Pennsylvania")
+midwest <-c ("Ohio","Wisconsin","Iowa", "Kansas", "Minnesota", "Missouri", "Nebraska", "North Dakota","Illinois", "Indiana", "Michigan", "South Dakota")
+south <-c ("District of Columbia", "West Virginia","Delaware", "Florida", "Georgia", "Maryland", "North Carolina", "South Carolina", "Virginia", "Alabama", "Kentucky", "Mississippi","Tennessee","Arkansas", "Louisiana", "Oklahoma","Texas")
+west <-c ("Arizona", "Colorado", "Idaho", "Montana", "Nevada", "New Mexico", "Utah", "Wyoming","Alaska", "California", "Hawaii", "Oregon", "Washington")
+
+f_m$region <-ifelse(f_m$State %in% northeast,'Northeast',
+                     ifelse(f_m$State %in% midwest,'Mid West',
+                            ifelse(f_m$State %in% south,'South',
+                                   ifelse(f_m$State %in% west,'West','Other'))))
+
+
+f_m1<-aggregate (list (Count = f_m$FMID),by = list(region = f_m$region), FUN = length)
+
+#Box plot by region
+barplot <- ggplot(data = f_m1,aes(x = reorder(region, Count), y = Count), FUN = Count) + geom_bar(stat="identity", fill = "yellow")+ xlab("Region") + ylab("Total number of markets") + ggtitle("Number of Markets by Region") + ggsave("marketbyregion.png", dpi = 400)
+
+barplot
+
+```
+
+```{r}
+#location map of markets accepting SFMNP payments
+m1 <- f_market %>% select(x, y, SFMNP) %>% mutate(SFMNP= ifelse(SFMNP== "Y", 1, 0))%>%na.omit()%>% filter(x <= -67.24) %>% filter(SFMNP == 1)
+
+test_data <- data.frame(lon = "x", lat = "y")
+transformed_data <- usmap_transform(m1)
+plot_usmap("states") + 
+  geom_point(data = transformed_data, 
+             aes(x = x.1, y = y.1),color = "blue", size = 1)+ggtitle("Market locations accepting SFMNP mode of payment") + ggsave("SFMNP Payment.png", dpi = 400)
+        
+
+#location map of markets accepting SNAP payments 
+m2 <- f_market %>% select(x, y, SNAP) %>% mutate(SNAP= ifelse(SNAP== "Y", 1, 0))%>%na.omit()%>% filter(x <= -67.24) %>% filter(SNAP == 1)
+
+test_data <- data.frame(lon = "x", lat = "y")
+transformed_data <- usmap_transform(m2)
+plot_usmap("states") + 
+  geom_point(data = transformed_data, 
+             aes(x = x.1, y = y.1), 
+             color = "maroon",
+             size = 1)+ggtitle("Market locations acccepting SNAP mode of payment") + ggsave("SNAP Payment.png", dpi = 400)
+
+
+```
+
+```{r}
+#Heat Maps to find correlation
+#Selecting specific data
+x1<-fm[,24:60]
+x1<-x1[-c(36,1:5)]
+
+#Assigning values
+x1[is.na(x1)]<-'N'
+x1[x1 == 'N' ] <- 0
+x1[x1 == 'Y'] <- 1
+x1[x1 == '-'] <- 0
+x1[, 1:30] <-sapply(x1[, 1:30], as.numeric)
+x3 <- aggregate(list(counts = x1[-31]),by = list(region = x1$region), FUN = sum)
+
+#Removing "other" category form the regions
+x3 <- x3[-c(3),]
+
+row.names(x3)<-x3$region
+x3<-x3[-1]
+x1_mat <-t(data.matrix(x3))
+par(las=1,cxy = 5)
+
+#Heat map for the product and region
+ggplot(melt(x1_mat),aes(Var1,Var2,fill = value)) + geom_raster() +coord_flip() +
+  labs(title = 'Product Category and Region',x = 'Category',y = 'Region', text = element_text(size = 10)) +
+  scale_fill_gradient2(name = 'scale',low="white",mid="red", high="black") + theme_update(text = element_text(size=10, family="Times New Roman")) + ggsave("product vs region.png", dpi = 400)
+
+#Selecting specific data
+x2<-fm[,24:28]
+x2<-data.frame(x2,fm$region)
+
+#Assigning values
+x2[is.na(x2)]<-'N'
+x2[x2 == 'N' ] <- 0
+x2[x2 == 'Y'] <- 1
+x2[x2 == '-'] <- 0
+
+x2[, 1:5]<-sapply(x2[, 1:5], as.numeric)
+x4a <- aggregate(list(counts = x2[-6]),by = list(region = x2$fm.region), FUN = sum)
+#removing "Other" from regions
+x4a <- x4a[-c(3),]
+row.names(x4a)<-x4a$region
+x4a<-x4a[-1]
+x2_mat <-t(data.matrix(x4a))
+
+#Heat map for the mode of payment and region
+ggplot(melt(x2_mat),aes(Var1,Var2,fill = value)) + geom_raster() +
+  labs(title = 'Payment Methods and region',x = 'Payment Method',y = 'Region', vjust = 1) +
+  scale_fill_gradient2(name = 'Scale',low="white",mid="blue", high="black") + theme_update(text = element_text(size=20, family="Times New Roman")) + theme(axis.text = element_text(size = 8, vjust = 0.5))
+
+```
+
+
+```
